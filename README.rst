@@ -1,6 +1,8 @@
 ``pypcd``
 =========
 
+** This is a fork of the original ``pypcd`` library to support Python 3. **
+
 What?
 -----
 
