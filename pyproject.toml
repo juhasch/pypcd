@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pypcd"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read and write PCL .pcd files in Python"
 authors = [
     { name = "dimatura", email = "dimatura@cmu.edu" }
