@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pypcd"
+version = "0.1.0"
+description = "Read and write PCL .pcd files in Python"
+authors = [
+    { name = "dimatura", email = "dimatura@cmu.edu" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "numpy>=1.19.0",
+    "python-lzf>=0.2.6",
+]
+
+[project.optional-dependencies]
+ros = [
+    "sensor_msgs",
+    "numpy_pc2",
+]
+
+[tool.setuptools]
+packages = ["pypcd"] 

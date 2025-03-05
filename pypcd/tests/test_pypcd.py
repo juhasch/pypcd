@@ -60,7 +60,7 @@ def bin_pcd_fname():
 
 
 def cloud_centroid(pc):
-    xyz = np.empty((pc.points, 3), dtype=np.float)
+    xyz = np.empty((pc.points, 3), dtype=np.float32)
     xyz[:, 0] = pc.pc_data['x']
     xyz[:, 1] = pc.pc_data['y']
     xyz[:, 2] = pc.pc_data['z']
@@ -128,7 +128,12 @@ def test_path_roundtrip_ascii(pcd_fname):
 
     pc2 = pypcd.PointCloud.from_path(tmp_fname)
     md2 = pc2.get_metadata()
-    assert(md == md2)
+    for k, v in md2.items():
+        assert(k in md)
+        if k != 'data':
+            assert(md[k] == v)
+        else:
+            assert(v == 'ascii')
 
     np.testing.assert_equal(pc.pc_data, pc2.pc_data)
 
@@ -152,11 +157,12 @@ def test_path_roundtrip_binary(pcd_fname):
 
     pc2 = pypcd.PointCloud.from_path(tmp_fname)
     md2 = pc2.get_metadata()
-    for k, v in md2.iteritems():
-        if k == 'data':
-            assert v == 'binary'
+    for k, v in md2.items():
+        assert(k in md)
+        if k != 'data':
+            assert(md[k] == v)
         else:
-            assert v == md[k]
+            assert(v == 'binary')
 
     np.testing.assert_equal(pc.pc_data, pc2.pc_data)
 
@@ -180,7 +186,7 @@ def test_path_roundtrip_binary_compressed(pcd_fname):
 
     pc2 = pypcd.PointCloud.from_path(tmp_fname)
     md2 = pc2.get_metadata()
-    for k, v in md2.iteritems():
+    for k, v in md2.items():
         if k == 'data':
             assert v == 'binary_compressed'
         else:
