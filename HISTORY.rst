@@ -11,3 +11,12 @@ History
 ------------------
 
 * Second release on PyPI.
+
+0.2.0 (2025-03-06)
+------------------
+
+* Update to Python 3
+* Update dependencies
+* Add documentation
+* Add tests
+
