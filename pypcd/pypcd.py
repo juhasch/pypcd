@@ -105,7 +105,7 @@ def parse_header(lines):
     for ln in lines:
         if ln.startswith('#') or len(ln) < 2:
             continue
-        match = re.match('(\w+)\s+([\w\s\.]+)', ln)
+        match = re.match(r'(\w+)\s+([\w\s\.]+)', ln)
         if not match:
             warnings.warn("warning: can't understand line: %s" % ln)
             continue
@@ -219,13 +219,6 @@ def _metadata_is_consistent(metadata):
             print('error:', msg)
             ok = False
     return ok
-
-# def pcd_type_to_numpy(pcd_type, pcd_sz):
-#     """ convert from a pcd type string and size to numpy dtype."""
-#     typedict = {'F' : { 4:np.float32, 8:np.float64 },
-#                 'I' : { 1:np.int8, 2:np.int16, 4:np.int32, 8:np.int64 },
-#                 'U' : { 1:np.uint8, 2:np.uint16, 4:np.uint32 , 8:np.uint64 }}
-#     return typedict[pcd_type][pcd_sz]
 
 
 def _build_dtype(metadata):
@@ -441,16 +434,14 @@ def point_cloud_from_buffer(buf):
 
 
 def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
-    """ Write pointcloud as .pcd to fileobj.
-    
-    Writes a PointCloud object to a file object in PCD format.
-    
+    """Write pointcloud as .pcd to fileobj.
+
     Args:
         pc: A PointCloud object
         fileobj: A file object opened in appropriate mode ('w' for ASCII, 'wb' for binary)
         data_compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
-                          If None, uses the compression type specified in the PointCloud object.
-                          
+        If None, uses the compression type specified in the PointCloud object
+
     Raises:
         TypeError: If binary data is being written to a text file object
         ValueError: If the data type is unknown
@@ -460,7 +451,7 @@ def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
         data_compression = data_compression.lower()
         if data_compression not in ('ascii', 'binary', 'binary_compressed'):
             raise ValueError(f"Invalid compression type: {data_compression}. "
-                             f"Must be one of 'ascii', 'binary', or 'binary_compressed'")
+                          f"Must be one of 'ascii', 'binary', or 'binary_compressed'")
         metadata['data'] = data_compression
 
     # Check if we need binary mode before writing anything
@@ -524,15 +515,13 @@ def point_cloud_to_path(pc, fname):
 
 
 def point_cloud_to_buffer(pc, data_compression=None):
-    """ Write pointcloud to a buffer in PCD format.
-    
-    Converts a PointCloud object to a buffer in PCD format.
-    
+    """Write pointcloud to a buffer in PCD format.
+
     Args:
         pc: A PointCloud object
         data_compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
-                          If None, uses the compression type specified in the PointCloud object.
-                          
+        If None, uses the compression type specified in the PointCloud object
+
     Returns:
         A buffer containing the PCD data
     """
@@ -578,17 +567,14 @@ def save_point_cloud_bin_compressed(pc, fname):
 
 
 def save_xyz_label(pc, fname, use_default_lbl=False):
-    """ Save a simple (x y z label) pointcloud, ignoring all other features.
-    
-    Saves a point cloud as a text file with x, y, z coordinates and a label.
-    If the point cloud doesn't have a label field, a default label of 1000 can be used.
-    
+    """Save a simple (x y z label) pointcloud, ignoring all other features.
+
     Args:
         pc: A PointCloud object
         fname: Path to the output text file
         use_default_lbl: If True, use a default label of 1000 when the point cloud
-                         doesn't have a label field
-    
+                        doesn't have a label field
+
     Raises:
         Exception: If the point cloud doesn't have a label field and use_default_lbl is False
     """
@@ -605,17 +591,14 @@ def save_xyz_label(pc, fname, use_default_lbl=False):
 
 
 def save_xyz_intensity_label(pc, fname, use_default_lbl=False):
-    """ Save XYZI point cloud with labels.
-    
-    Saves a point cloud as a text file with x, y, z coordinates, intensity, and a label.
-    If the point cloud doesn't have a label field, a default label of 1000 can be used.
-    
+    """Save XYZI point cloud with labels.
+
     Args:
         pc: A PointCloud object
         fname: Path to the output text file
         use_default_lbl: If True, use a default label of 1000 when the point cloud
-                         doesn't have a label field
-    
+                        doesn't have a label field
+
     Raises:
         Exception: If the point cloud doesn't have a label field and use_default_lbl is False
         Exception: If the point cloud doesn't have an intensity field
@@ -681,67 +664,43 @@ def update_field(pc, field, pc_data):
 
 
 def add_fields(pc, metadata, pc_data):
-    """ Builds copy of pointcloud with extra fields.
-    
-    Creates a new point cloud by adding new fields to an existing point cloud.
-    
+    """Build a new point cloud with additional fields.
+
     Args:
-        pc: A PointCloud object
-        metadata: A dictionary containing metadata for the new fields.
-                 Must have keys 'fields', 'count', 'size', and 'type'.
-        pc_data: A numpy record array containing the data for the new fields
-        
+        pc: Base PointCloud object
+        metadata: Dictionary containing metadata for the new fields
+        pc_data: Numpy structured array containing the new field data
+
     Returns:
         A new PointCloud object with the additional fields
-        
-    Raises:
-        Exception: If any of the new fields already exist in the point cloud
-        Exception: If the number of points in pc_data doesn't match the point cloud
-        
+
     Note:
-        Multi-count fields are sketchy, yet again.
+        The new fields are appended to the existing ones.
     """
-    if len(set(metadata['fields']).intersection(set(pc.fields))) > 0:
-        raise Exception("Fields with that name exist.")
-
-    if pc.points != len(pc_data):
-        raise Exception("Mismatch in number of points.")
-
     new_metadata = pc.get_metadata()
     new_metadata['fields'].extend(metadata['fields'])
     new_metadata['count'].extend(metadata['count'])
     new_metadata['size'].extend(metadata['size'])
     new_metadata['type'].extend(metadata['type'])
 
-    # parse metadata to add
-    # TODO factor this
-    fieldnames, typenames = [], []
-    for f, c, t, s in zip(metadata['fields'],
-                          metadata['count'],
-                          metadata['type'],
-                          metadata['size']):
+    # Create dtype for new point cloud
+    old_dtype = pc.pc_data.dtype
+    new_dtype = [(n, pc.pc_data.dtype[n]) for n in pc.pc_data.dtype.names]
+    for n, c, s, t in zip(metadata['fields'], metadata['count'],
+                         metadata['size'], metadata['type']):
         np_type = pcd_type_to_numpy_type[(t, s)]
         if c == 1:
-            fieldnames.append(f)
-            typenames.append(np_type)
+            new_dtype.append((n, np_type))
         else:
-            fieldnames.extend(['%s_%04d' % (f, i) for i in range(c)])
-            typenames.extend([np_type]*c)
-    dtype = list(zip(fieldnames, typenames))
-    # new dtype. could be inferred?
-    new_dtype = [(f, pc.pc_data.dtype[f])
-                 for f in pc.pc_data.dtype.names] + dtype
+            new_dtype.append((n, np_type, c))
 
     new_data = np.empty(len(pc.pc_data), new_dtype)
     for n in pc.pc_data.dtype.names:
         new_data[n] = pc.pc_data[n]
-    for n, n_tmp in zip(fieldnames, pc_data.dtype.names):
+    for n, n_tmp in zip(metadata['fields'], pc_data.dtype.names):
         new_data[n] = pc_data[n_tmp]
 
-    # TODO maybe just all the metadata in the dtype.
-    # TODO maybe use composite structured arrays for fields with count > 1
-    newpc = PointCloud(new_metadata, new_data)
-    return newpc
+    return PointCloud(new_metadata, new_data)
 
 
 def cat_point_clouds(pc1, pc2):
@@ -809,23 +768,21 @@ def make_xyz_point_cloud(xyz, metadata=None):
 
 
 def make_xyz_rgb_point_cloud(xyz_rgb, metadata=None):
-    """ Make a pointcloud object from xyz and rgb data.
-    
-    Creates a point cloud from an array of XYZ coordinates and RGB values.
-    
+    """Make a pointcloud object from xyz and rgb data.
+
     Args:
         xyz_rgb: A numpy array of shape (N, 4) containing XYZ coordinates and RGB values.
-                The RGB values should be encoded as a single float32 according to PCL conventions.
+        The RGB values should be encoded as a single float32 according to PCL conventions
         metadata: Optional dictionary with additional metadata to include
-        
+
     Returns:
         A PointCloud object
-        
+
     Raises:
         ValueError: If the input array is not of type float32
-        
+
     Note:
-        The RGB values should be encoded using encode_rgb_for_pcl().
+        The RGB values should be encoded using encode_rgb_for_pcl()
     """
     md = {'version': .7,
           'fields': ['x', 'y', 'z', 'rgb'],
@@ -842,13 +799,10 @@ def make_xyz_rgb_point_cloud(xyz_rgb, metadata=None):
     if metadata is not None:
         md.update(metadata)
     pc_data = xyz_rgb.view(np.dtype([('x', np.float32),
-                                     ('y', np.float32),
-                                     ('z', np.float32),
-                                     ('rgb', np.float32)])).squeeze()
-    # pc_data = np.rec.fromarrays([xyz[:,0], xyz[:,1], xyz[:,2]], dtype=dt)
-    # data = np.rec.fromarrays([xyz.T], dtype=dt)
-    pc = PointCloud(md, pc_data)
-    return pc
+                                   ('y', np.float32),
+                                   ('z', np.float32),
+                                   ('rgb', np.float32)])).squeeze()
+    return PointCloud(md, pc_data)
 
 
 def encode_rgb_for_pcl(rgb):
@@ -939,30 +893,122 @@ def make_xyz_label_point_cloud(xyzl, label_type='f'):
     return pc
 
 
+def point_cloud_to_ply(pc, fileobj, data_format='ascii'):
+    """Write pointcloud as .ply to a file object.
+    
+    Args:
+        pc: A PointCloud object
+        fileobj: A file object opened in appropriate mode ('w' for ASCII, 'wb' for binary)
+        data_format: Format to save in ('ascii' or 'binary')
+        
+    Note:
+        Binary format uses little-endian byte order.
+    """
+    # Validate format
+    if data_format.lower() not in ('ascii', 'binary'):
+        raise ValueError("Format must be 'ascii' or 'binary'")
+    
+    # Write header
+    header = ['ply',
+             'format %s 1.0' % ('ascii' if data_format.lower() == 'ascii' else 'binary_little_endian'),
+             'comment Generated by pypcd',
+             'element vertex %d' % pc.points]
+    
+    # Map PCD types to PLY types
+    type_map = {
+        ('F', 4): 'float',
+        ('F', 8): 'double',
+        ('U', 1): 'uchar',
+        ('U', 2): 'ushort',
+        ('U', 4): 'uint',
+        ('I', 1): 'char',
+        ('I', 2): 'short',
+        ('I', 4): 'int'
+    }
+    
+    # Write property definitions
+    for field, type_, size, count in zip(pc.fields, pc.type, pc.size, pc.count):
+        if count == 1:
+            ply_type = type_map.get((type_, size), 'float')
+            header.append('property %s %s' % (ply_type, field))
+        else:
+            # Handle multi-count properties (like normals)
+            for i in range(count):
+                ply_type = type_map.get((type_, size), 'float')
+                header.append('property %s %s_%d' % (ply_type, field, i))
+    
+    header.append('end_header')
+    header = '\n'.join(header) + '\n'
+    
+    if isinstance(fileobj, (sio, bytes)) or (hasattr(fileobj, 'mode') and 'b' in fileobj.mode):
+        fileobj.write(header.encode('ascii'))
+    else:
+        fileobj.write(header)
+    
+    if data_format.lower() == 'ascii':
+        # Write ASCII data
+        fmtstr = []
+        for t, cnt in zip(pc.type, pc.count):
+            if t == 'F':
+                fmtstr.extend(['%.10f']*cnt)
+            elif t in ('I', 'U'):
+                fmtstr.extend(['%d']*cnt)
+        fmtstr = ' '.join(fmtstr)
+        
+        for i in range(pc.points):
+            line = []
+            for field, count in zip(pc.fields, pc.count):
+                if count == 1:
+                    line.append(pc.pc_data[field][i].item())  # Extract scalar value
+                else:
+                    line.extend(x.item() for x in pc.pc_data[field][i])  # Extract scalar values
+            fileobj.write(fmtstr % tuple(line) + '\n')
+    else:
+        # Write binary data
+        # Ensure the data is in the correct byte order (little-endian)
+        for field in pc.pc_data.dtype.names:
+            data = pc.pc_data[field].astype(pc.pc_data.dtype[field], copy=True)
+            if data.dtype.byteorder == '>':  # big-endian
+                data = data.byteswap()
+            fileobj.write(data.tobytes())
+
+def save_point_cloud_ply(pc, fname, data_format='ascii'):
+    """Save pointcloud to a PLY file.
+    
+    Args:
+        pc: A PointCloud object
+        fname: Path to the output PLY file
+        data_format: Format to save in ('ascii' or 'binary')
+    """
+    mode = 'wb' if data_format.lower() == 'binary' else 'w'
+    with open(fname, mode) as f:
+        point_cloud_to_ply(pc, f, data_format)
+
+
 class PointCloud(object):
     """ Wrapper for point cloud data.
 
     The variable members of this class parallel the ones used by
-    the PCD metadata (and similar to PCL and ROS PointCloud2 messages),
+    the PCD metadata (and similar to PCL and ROS PointCloud2 messages).
 
     ``pc_data`` holds the actual data as a structured numpy array.
 
     The other relevant metadata variables are:
 
     - ``version``: Version, usually .7
-    - ``fields``: Field names, e.g. ``['x', 'y' 'z']``.
-    - ``size.`: Field sizes in bytes, e.g. ``[4, 4, 4]``.
+    - ``fields``: Field names, e.g. ``['x', 'y' 'z']``
+    - ``size``: Field sizes in bytes, e.g. ``[4, 4, 4]``
     - ``count``: Counts per field e.g. ``[1, 1, 1]``. NB: Multi-count field
-      support is sketchy.
+      support is sketchy
     - ``width``: Number of points, for unstructured point clouds (assumed by
-      most operations).
+      most operations)
     - ``height``: 1 for unstructured point clouds (again, what we assume most
-      of the time.
+      of the time)
     - ``viewpoint``: A pose for the viewpoint of the cloud, as
-      x y z qw qx qy qz, e.g. ``[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]``.
-    - ``points``: Number of points.
-    - ``type``: Data type of each field, e.g. ``[F, F, F]``.
-    - ``data``: Data storage format. One of ``ascii``, ``binary`` or ``binary_compressed``.
+      x y z qw qx qy qz, e.g. ``[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]``
+    - ``points``: Number of points
+    - ``type``: Data type of each field, e.g. ``['F', 'F', 'F']``
+    - ``data``: Data storage format. One of ``ascii``, ``binary`` or ``binary_compressed``
 
     See `PCL docs <http://pointclouds.org/documentation/tutorials/pcd_file_format.php>`__
     for more information.
@@ -1021,69 +1067,47 @@ class PointCloud(object):
         """
         self.save_pcd(fname, compression='ascii')
 
-    def save_pcd(self, fname, compression=None, **kwargs):
+    def save_pcd(self, fname, compression=None):
         """Save the point cloud to a PCD file.
-        
+
         Args:
             fname: Path to the output PCD file
-            compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
-                         If None, uses the compression type specified in the PointCloud object.
-            **kwargs: Additional keyword arguments (for backward compatibility)
-        
-        Note:
-            The 'data_compression' keyword argument is deprecated in favor of 'compression'.
-        """
-        # Handle deprecated keyword argument
-        if 'data_compression' in kwargs:
-            warnings.warn('data_compression keyword is deprecated for compression')
-            compression = kwargs['data_compression']
-        
-        # Determine if we need binary mode based on compression type or current data format
-        data_format = compression.lower() if compression is not None else self.data.lower()
-        needs_binary = data_format in ('binary', 'binary_compressed')
-        mode = 'wb' if needs_binary else 'w'
-        
-        with open(fname, mode) as f:
-            point_cloud_to_fileobj(self, f, compression)
+        compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
+            If None, uses the compression type specified in the PointCloud object
 
-    def save_pcd_to_fileobj(self, fileobj, compression=None, **kwargs):
+        Note:
+            The 'data_compression' keyword argument is deprecated in favor of 'compression'
+        """
+        if compression is None:
+            compression = self.data
+        point_cloud_to_fileobj(self, open(fname, 'wb'), compression)
+
+    def save_pcd_to_fileobj(self, fileobj, compression=None):
         """Save the point cloud to a file object in PCD format.
-        
+
         Args:
             fileobj: A file object opened in appropriate mode ('w' for ASCII, 'wb' for binary)
-            compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
-                         If None, uses the compression type specified in the PointCloud object.
-            **kwargs: Additional keyword arguments (for backward compatibility)
-            
+            compression: Optional compression type ('ascii', 'binary', or 'binary_compressed'). 
+            If None, uses the compression type specified in the PointCloud object
+
         Note:
-            The 'data_compression' keyword argument is deprecated in favor of 'compression'.
+            The 'data_compression' keyword argument is deprecated in favor of 'compression'
         """
-        # Handle deprecated keyword argument
-        if 'data_compression' in kwargs:
-            warnings.warn('data_compression keyword is deprecated for compression')
-            compression = kwargs['data_compression']
-            
         point_cloud_to_fileobj(self, fileobj, compression)
 
-    def save_pcd_to_buffer(self, compression=None, **kwargs):
+    def save_pcd_to_buffer(self, compression=None):
         """Save the point cloud to a buffer in PCD format.
         
         Args:
             compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
                          If None, uses the compression type specified in the PointCloud object.
-            **kwargs: Additional keyword arguments (for backward compatibility)
-            
+        
         Returns:
             A buffer containing the PCD data
-            
+        
         Note:
             The 'data_compression' keyword argument is deprecated in favor of 'compression'.
         """
-        # Handle deprecated keyword argument
-        if 'data_compression' in kwargs:
-            warnings.warn('data_compression keyword is deprecated for compression')
-            compression = kwargs['data_compression']
-            
         fileobj = sio()
         point_cloud_to_fileobj(self, fileobj, compression)
         return fileobj.getvalue()
@@ -1100,23 +1124,23 @@ class PointCloud(object):
 
     def save_xyz_label(self, fname, **kwargs):
         """Save the point cloud to a text file with XYZ coordinates and labels.
-        
+
         A convenience method that calls the save_xyz_label function.
-        
+
         Args:
             fname: Path to the output text file
-            **kwargs: Additional keyword arguments to pass to save_xyz_label
+            kwargs: Additional keyword arguments to pass to save_xyz_label
         """
         save_xyz_label(self, fname, **kwargs)
 
     def save_xyz_intensity_label(self, fname, **kwargs):
         """Save the point cloud to a text file with XYZ coordinates, intensity, and labels.
-        
+
         A convenience method that calls the save_xyz_intensity_label function.
-        
+
         Args:
             fname: Path to the output text file
-            **kwargs: Additional keyword arguments to pass to save_xyz_intensity_label
+            kwargs: Additional keyword arguments to pass to save_xyz_intensity_label
         """
         save_xyz_intensity_label(self, fname, **kwargs)
 
@@ -1263,3 +1287,12 @@ class PointCloud(object):
         md['points'] = len(pc_data)
         pc = PointCloud(md, pc_data)
         return pc
+
+    def save_ply(self, fname, data_format='ascii'):
+        """Save the point cloud to a PLY file.
+        
+        Args:
+            fname: Path to the output PLY file
+            data_format: Format to save in ('ascii' or 'binary')
+        """
+        save_point_cloud_ply(self, fname, data_format)

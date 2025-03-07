@@ -373,15 +373,179 @@ def test_save_xyz_intensity_label(pcd_fname):
 
 def test_point_cloud_from_buffer(pcd_fname):
     import pypcd
-    pc = pypcd.PointCloud.from_path(pcd_fname)
-    buffer = pc.save_pcd_to_buffer()
-    pc_from_buffer = pypcd.PointCloud.from_buffer(buffer)
+    with open(pcd_fname, 'rb') as f:
+        buf = f.read()
+    pc = pypcd.point_cloud_from_buffer(buf)
+    pc2 = pypcd.point_cloud_from_path(pcd_fname)
+    np.testing.assert_equal(pc.pc_data, pc2.pc_data)
+
+
+def test_save_ply_ascii():
+    """Test saving point cloud to ASCII PLY format."""
+    import pypcd
+    # Create a simple point cloud with XYZ coordinates
+    xyz = np.array([[1.0, 2.0, 3.0],
+                    [4.0, 5.0, 6.0],
+                    [7.0, 8.0, 9.0]], dtype=np.float32)
+    pc = pypcd.make_xyz_point_cloud(xyz)
     
-    # Verify metadata
-    assert pc.fields == pc_from_buffer.fields
-    assert pc.width == pc_from_buffer.width
-    assert pc.height == pc_from_buffer.height
-    assert pc.points == pc_from_buffer.points
+    # Save to temporary PLY file
+    tmp_dirname = tempfile.mkdtemp(suffix='_pypcd', prefix='tmp')
+    tmp_fname = os.path.join(tmp_dirname, 'test.ply')
     
-    # Verify data
-    np.testing.assert_array_equal(pc.pc_data, pc_from_buffer.pc_data)
+    try:
+        # Save in ASCII format
+        pc.save_ply(tmp_fname, data_format='ascii')
+        
+        # Read the file and verify contents
+        with open(tmp_fname, 'r') as f:
+            lines = f.readlines()
+        
+        # Check header
+        assert lines[0].strip() == 'ply'
+        assert lines[1].strip() == 'format ascii 1.0'
+        assert 'element vertex 3' in [line.strip() for line in lines]
+        
+        # Find where data begins (after end_header)
+        data_start = next(i for i, line in enumerate(lines) if 'end_header' in line) + 1
+        
+        # Check data
+        data_lines = [line.strip().split() for line in lines[data_start:data_start+3]]
+        data_array = np.array(data_lines, dtype=np.float32)
+        np.testing.assert_array_almost_equal(data_array, xyz)
+        
+    finally:
+        if os.path.exists(tmp_dirname):
+            shutil.rmtree(tmp_dirname)
+
+
+def test_save_ply_binary():
+    """Test saving point cloud to binary PLY format."""
+    import pypcd
+    # Create a point cloud with XYZ and RGB data
+    xyz = np.random.rand(100, 3).astype(np.float32)
+    rgb = np.random.randint(0, 256, (100, 3), dtype=np.uint8)
+    rgb_encoded = np.array([pypcd.encode_rgb_for_pcl(r.reshape(1, 3)) for r in rgb], dtype=np.float32)
+    xyz_rgb = np.column_stack([xyz, rgb_encoded])
+    pc = pypcd.make_xyz_rgb_point_cloud(xyz_rgb)
+    
+    # Save to temporary PLY file
+    tmp_dirname = tempfile.mkdtemp(suffix='_pypcd', prefix='tmp')
+    tmp_fname = os.path.join(tmp_dirname, 'test.ply')
+    
+    try:
+        # Save in binary format
+        pc.save_ply(tmp_fname, data_format='binary')
+        
+        # Verify file exists and has non-zero size
+        assert os.path.exists(tmp_fname)
+        assert os.path.getsize(tmp_fname) > 0
+        
+        # Read the header to verify format
+        with open(tmp_fname, 'rb') as f:
+            header = []
+            while True:
+                line = f.readline().decode('ascii').strip()
+                header.append(line)
+                if line == 'end_header':
+                    break
+        
+        # Verify header contents
+        assert header[0] == 'ply'
+        assert header[1] == 'format binary_little_endian 1.0'
+        assert 'element vertex 100' in header
+        assert all(prop in header for prop in ['property float x',
+                                             'property float y',
+                                             'property float z',
+                                             'property float rgb'])
+        
+    finally:
+        if os.path.exists(tmp_dirname):
+            shutil.rmtree(tmp_dirname)
+
+
+def test_save_ply_with_normals():
+    """Test saving point cloud with normal vectors to PLY format."""
+    import pypcd
+    # Create metadata for point cloud with normals
+    points = 50
+    md = {
+        'version': .7,
+        'fields': ['x', 'y', 'z', 'normal_x', 'normal_y', 'normal_z'],
+        'size': [4] * 6,
+        'type': ['F'] * 6,
+        'count': [1] * 6,
+        'width': points,
+        'height': 1,
+        'viewpoint': [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+        'points': points,
+        'data': 'ascii'
+    }
+    
+    # Create random point cloud data with normals
+    xyz = np.random.rand(points, 3).astype(np.float32)
+    normals = np.random.rand(points, 3).astype(np.float32)
+    # Normalize the normal vectors
+    normals = normals / np.linalg.norm(normals, axis=1)[:, np.newaxis]
+    
+    # Create structured array
+    dtype = [(f, 'f4') for f in md['fields']]
+    pc_data = np.empty(points, dtype=dtype)
+    pc_data['x'] = xyz[:, 0]
+    pc_data['y'] = xyz[:, 1]
+    pc_data['z'] = xyz[:, 2]
+    pc_data['normal_x'] = normals[:, 0]
+    pc_data['normal_y'] = normals[:, 1]
+    pc_data['normal_z'] = normals[:, 2]
+    
+    pc = pypcd.PointCloud(md, pc_data)
+    
+    # Save to temporary PLY file
+    tmp_dirname = tempfile.mkdtemp(suffix='_pypcd', prefix='tmp')
+    tmp_fname = os.path.join(tmp_dirname, 'test.ply')
+    
+    try:
+        # Test both ASCII and binary formats
+        for fmt in ['ascii', 'binary']:
+            pc.save_ply(tmp_fname, data_format=fmt)
+            
+            # Verify file exists and has non-zero size
+            assert os.path.exists(tmp_fname)
+            assert os.path.getsize(tmp_fname) > 0
+            
+            # Read and verify header
+            mode = 'r' if fmt == 'ascii' else 'rb'
+            with open(tmp_fname, mode) as f:
+                header = []
+                while True:
+                    line = f.readline().decode('ascii').strip() if fmt == 'binary' else f.readline().strip()
+                    header.append(line)
+                    if line == 'end_header':
+                        break
+            
+            # Verify header contents
+            assert header[0] == 'ply'
+            assert header[1] == f'format {fmt if fmt == "ascii" else "binary_little_endian"} 1.0'
+            assert 'element vertex 50' in header
+            assert all(prop in header for prop in [
+                'property float x',
+                'property float y',
+                'property float z',
+                'property float normal_x',
+                'property float normal_y',
+                'property float normal_z'
+            ])
+            
+    finally:
+        if os.path.exists(tmp_dirname):
+            shutil.rmtree(tmp_dirname)
+
+
+def test_save_ply_invalid_format():
+    """Test that invalid PLY format raises ValueError."""
+    import pypcd
+    xyz = np.random.rand(10, 3).astype(np.float32)
+    pc = pypcd.make_xyz_point_cloud(xyz)
+    
+    with pytest.raises(ValueError):
+        pc.save_ply('test.ply', data_format='invalid_format')

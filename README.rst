@@ -49,7 +49,7 @@ Example
 
 
 Installation
---------------
+------------
 
 Using pip (recommended):
 
@@ -123,7 +123,7 @@ Features
 - Python 3 support
 
 Known Limitations
-----------------
+-----------------
 
 - No automatic synchronization between metadata fields and ``pc_data``
 - Primary focus on unorganized point clouds (``height=1``)
