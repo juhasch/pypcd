@@ -10,6 +10,11 @@ import os
 import shutil
 import tempfile
 
+# Get the directory containing the test file
+TEST_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the project root directory (one level up from test directory)
+PROJECT_ROOT = os.path.dirname(TEST_DIR)
+
 header1 = """\
 # .PCD v0.7 - Point Cloud Data file format
 VERSION 0.7
@@ -40,23 +45,17 @@ DATA ascii
 
 @pytest.fixture
 def pcd_fname():
-    import pypcd
-    return os.path.join(pypcd.__path__[0], 'test_data',
-                        'partial_cup_model.pcd')
+    return os.path.join(PROJECT_ROOT, 'test_data', 'partial_cup_model.pcd')
 
 
 @pytest.fixture
 def ascii_pcd_fname():
-    import pypcd
-    return os.path.join(pypcd.__path__[0], 'test_data',
-                        'ascii.pcd')
+    return os.path.join(PROJECT_ROOT, 'test_data', 'ascii.pcd')
 
 
 @pytest.fixture
 def bin_pcd_fname():
-    import pypcd
-    return os.path.join(pypcd.__path__[0], 'test_data',
-                        'bin.pcd')
+    return os.path.join(PROJECT_ROOT, 'test_data', 'bin.pcd')
 
 
 def cloud_centroid(pc):
