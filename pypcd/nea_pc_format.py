@@ -1,7 +1,21 @@
+try:
+    from sensor_msgs.msg import PointField
+    HAS_SENSOR_MSGS = True
+except ImportError:
+    HAS_SENSOR_MSGS = False
+    # Define PointField constants in case sensor_msgs is not available
+    class PointField:
+        INT8 = 1
+        UINT8 = 2
+        INT16 = 3
+        UINT16 = 4
+        INT32 = 5
+        UINT32 = 6
+        FLOAT32 = 7
+        FLOAT64 = 8
 
 import copy
 import numpy as np
-from sensor_msgs.msg import PointField
 
 # these are from numpy_pc2
 _pftype_to_nptype = dict([(PointField.INT8, np.dtype('int8')),

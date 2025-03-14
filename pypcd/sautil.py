@@ -26,7 +26,7 @@ def transform_cloud_array(T_a_b, pc_data):
     pc_data['x'] = xyz_b[:, 0]
     pc_data['y'] = xyz_b[:, 1]
     pc_data['z'] = xyz_b[:, 2]
-    if 'x_origin' in pc_data:
+    if 'x_origin' in pc_data.dtype.names:
         xyz_origin = get_xyz_viewpoint_array(pc_data, dtype=pc_data.dtype[0])
         xyz_origin_b = transform_xyz(T_a_b, xyz_origin)
         pc_data['x_origin'] = xyz_origin_b[:, 0]
@@ -40,7 +40,7 @@ def flip_around_x(pc_data):
     pc_data['y'] = -pc_data['y']
     pc_data['z'] = -pc_data['z']
 
-    if 'x_origin' in pc_data:
+    if 'x_origin' in pc_data.dtype.names:
         pc_data['y_origin'] = -pc_data['y_origin']
         pc_data['z_origin'] = -pc_data['z_origin']
 

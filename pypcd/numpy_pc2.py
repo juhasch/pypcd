@@ -40,8 +40,26 @@ __docformat__ = "restructuredtext en"
 
 import numpy as np
 
-from sensor_msgs.msg import PointField
-from sensor_msgs.msg import PointCloud2
+try:
+    from sensor_msgs.msg import PointField
+    from sensor_msgs.msg import PointCloud2
+    HAS_SENSOR_MSGS = True
+except ImportError:
+    HAS_SENSOR_MSGS = False
+    # Define PointField constants in case sensor_msgs is not available
+    class PointField:
+        INT8 = 1
+        UINT8 = 2
+        INT16 = 3
+        UINT16 = 4
+        INT32 = 5
+        UINT32 = 6
+        FLOAT32 = 7
+        FLOAT64 = 8
+    
+    class PointCloud2:
+        """Dummy class for when sensor_msgs is not available"""
+        pass
 
 # prefix to the names of dummy fields we add to get byte alignment correct. this needs to not
 # clash with any actual field names

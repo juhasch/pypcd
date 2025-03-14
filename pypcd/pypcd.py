@@ -33,12 +33,22 @@ import numpy as np
 import warnings
 import lzf
 
-HAS_SENSOR_MSGS = True
 try:
     from sensor_msgs.msg import PointField
     import numpy_pc2  # needs sensor_msgs
+    HAS_SENSOR_MSGS = True
 except ImportError:
     HAS_SENSOR_MSGS = False
+    # Define PointField constants in case sensor_msgs is not available
+    class PointField:
+        INT8 = 1
+        UINT8 = 2
+        INT16 = 3
+        UINT16 = 4
+        INT32 = 5
+        UINT32 = 6
+        FLOAT32 = 7
+        FLOAT64 = 8
 
 __all__ = ['PointCloud',
            'point_cloud_to_path',
@@ -300,7 +310,11 @@ def parse_ascii_pc_data(f, dtype, metadata):
     Returns:
         Numpy structured array containing the point cloud data
     """
-    return np.loadtxt(f, dtype=dtype, delimiter=' ')
+    # Read exactly the number of points specified in metadata
+    data = np.loadtxt(f, dtype=dtype, max_rows=metadata['points'])
+    if len(data) != metadata['points']:
+        raise ValueError(f"Expected {metadata['points']} points but got {len(data)}")
+    return data
 
 
 def parse_binary_pc_data(f, dtype, metadata):
@@ -389,7 +403,15 @@ def point_cloud_from_fileobj(f):
             dtype = _build_dtype(metadata)
             break
     if metadata['data'] == 'ascii':
-        pc_data = parse_ascii_pc_data(f, dtype, metadata)
+        # For ASCII data, we need to decode the remaining lines
+        lines = []
+        for line in f:
+            if isinstance(line, bytes):
+                line = line.decode('ascii')
+            lines.append(line)
+        pc_data = np.loadtxt(lines, dtype=dtype)
+        if len(pc_data) != metadata['points']:
+            raise ValueError(f"Expected {metadata['points']} points but got {len(pc_data)}")
     elif metadata['data'] == 'binary':
         pc_data = parse_binary_pc_data(f, dtype, metadata)
     elif metadata['data'] == 'binary_compressed':
@@ -434,31 +456,26 @@ def point_cloud_from_buffer(buf):
 
 
 def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
-    """Write pointcloud as .pcd to fileobj.
-
+    """Write pointcloud to fileobj
+    
     Args:
         pc: A PointCloud object
         fileobj: A file object opened in appropriate mode ('w' for ASCII, 'wb' for binary)
-        data_compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
-        If None, uses the compression type specified in the PointCloud object
-
-    Raises:
-        TypeError: If binary data is being written to a text file object
-        ValueError: If the data type is unknown
+        data_compression: Optional compression type ('ascii', 'binary', or 'binary_compressed'). 
+                         If None, uses the compression type specified in the PointCloud object.
     """
-    metadata = pc.get_metadata()
     if data_compression is not None:
-        data_compression = data_compression.lower()
-        if data_compression not in ('ascii', 'binary', 'binary_compressed'):
-            raise ValueError(f"Invalid compression type: {data_compression}. "
-                          f"Must be one of 'ascii', 'binary', or 'binary_compressed'")
+        metadata = pc.get_metadata()
         metadata['data'] = data_compression
+    else:
+        metadata = pc.get_metadata()
 
-    # Check if we need binary mode before writing anything
-    needs_binary = metadata['data'].lower() in ('binary', 'binary_compressed')
-    if needs_binary and not isinstance(fileobj, (sio, bytes)):
-        if hasattr(fileobj, 'mode') and 'b' not in fileobj.mode:
-            raise TypeError("Binary data can only be written to binary file objects")
+    if metadata['data'].lower() not in ('ascii', 'binary', 'binary_compressed'):
+        raise ValueError(f"Unknown DATA type: {metadata['data']}. "
+                         f"Must be one of 'ascii', 'binary', or 'binary_compressed'")
+
+    if metadata['data'].lower() in ('binary', 'binary_compressed') and hasattr(fileobj, 'mode') and 'b' not in fileobj.mode:
+        raise TypeError("Binary data can only be written to binary file objects")
 
     header = write_header(metadata)
     # Write header as string or bytes depending on file mode
@@ -469,7 +486,16 @@ def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
 
     if metadata['data'].lower() == 'ascii':
         fmtstr = build_ascii_fmtstr(pc)
-        np.savetxt(fileobj, pc.pc_data, fmt=fmtstr)
+        # Write each point on a single line to prevent wrapping
+        for i in range(pc.points):
+            line = []
+            for field in pc.pc_data.dtype.names:
+                val = pc.pc_data[field][i]
+                if pc.type[pc.fields.index(field)] == 'F':
+                    line.append('%.10f' % val)
+                elif pc.type[pc.fields.index(field)] in ('I', 'U'):
+                    line.append('%d' % val)
+            fileobj.write(' '.join(line) + '\n')
     elif metadata['data'].lower() == 'binary':
         # Ensure the data is in the correct byte order for binary output
         pc_data = pc.pc_data.copy()
@@ -494,10 +520,6 @@ def point_cloud_to_fileobj(pc, fileobj, data_compression=None):
         fmt = 'II'
         fileobj.write(struct.pack(fmt, compressed_size, uncompressed_size))
         fileobj.write(buf)
-    else:
-        raise ValueError(f"Unknown DATA type: {metadata['data']}. "
-                         f"Must be one of 'ascii', 'binary', or 'binary_compressed'")
-    # we can't close because if it's stringio buf then we can't get value after
 
 
 def point_cloud_to_path(pc, fname):
@@ -1072,15 +1094,17 @@ class PointCloud(object):
 
         Args:
             fname: Path to the output PCD file
-        compression: Optional compression type ('ascii', 'binary', or 'binary_compressed').
-            If None, uses the compression type specified in the PointCloud object
+            compression: Optional compression type ('ascii', 'binary', or 'binary_compressed'). 
+                        If None, uses the compression type specified in the PointCloud object
 
         Note:
             The 'data_compression' keyword argument is deprecated in favor of 'compression'
         """
         if compression is None:
             compression = self.data
-        point_cloud_to_fileobj(self, open(fname, 'wb'), compression)
+        # Use text mode for ASCII, binary mode for others
+        mode = 'w' if compression.lower() == 'ascii' else 'wb'
+        point_cloud_to_fileobj(self, open(fname, mode), compression)
 
     def save_pcd_to_fileobj(self, fileobj, compression=None):
         """Save the point cloud to a file object in PCD format.
